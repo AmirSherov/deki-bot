@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  deki-bot:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
