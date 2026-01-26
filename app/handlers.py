@@ -1,5 +1,6 @@
 import logging
 import uuid
+import asyncio
 from aiogram import Router
 from aiogram.types import Message, PreCheckoutQuery, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from aiogram.filters import CommandStart
@@ -55,7 +56,15 @@ async def pre_checkout(pre_checkout_query: PreCheckoutQuery, django: DjangoClien
         'telegram_user_id': pre_checkout_query.from_user.id,
     }
 
-    result = await django.post('/internal/payments/precheckout/', payload)
+    try:
+        result = await django.post('/internal/payments/precheckout/', payload, timeout_seconds=7)
+    except (asyncio.TimeoutError, Exception) as exc:
+        logger.exception("Precheckout failed: %s", exc)
+        try:
+            await pre_checkout_query.answer(ok=False, error_message="Payment validation failed")
+        except TelegramBadRequest:
+            await pre_checkout_query.answer(ok=False, error_message="Payment validation failed")
+        return
     data = result.get('data', {})
     ok = False
     error_message = 'Payment validation failed'

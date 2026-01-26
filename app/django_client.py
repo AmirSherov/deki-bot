@@ -1,4 +1,5 @@
 import aiohttp
+from aiohttp import ClientTimeout
 
 
 class DjangoClient:
@@ -16,14 +17,15 @@ class DjangoClient:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    async def post(self, path: str, payload: dict) -> dict:
+    async def post(self, path: str, payload: dict, timeout_seconds: float = 15) -> dict:
         url = f"{self.base_url}{path}"
         session = await self.session()
         headers = {
             'X-Bot-Secret': self.bot_secret,
             'Content-Type': 'application/json',
         }
-        async with session.post(url, json=payload, headers=headers, timeout=15) as resp:
+        timeout = ClientTimeout(total=timeout_seconds)
+        async with session.post(url, json=payload, headers=headers, timeout=timeout) as resp:
             data = await resp.json(content_type=None)
             return {
                 'status': resp.status,
