@@ -1,9 +1,9 @@
 import logging
-import uuid
 import asyncio
+import aiohttp
 from aiogram import Router
 from aiogram.types import Message, PreCheckoutQuery, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from app.django_client import DjangoClient
@@ -11,18 +11,6 @@ from app.django_client import DjangoClient
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-
-def _parse_intent_id(payload: str) -> str | None:
-    if not payload:
-        return None
-    if payload.startswith('dp:'):
-        payload = payload.split('dp:', 1)[1]
-    try:
-        uuid.UUID(payload)
-        return payload
-    except ValueError:
-        return None
 
 
 @router.message(CommandStart())
@@ -84,8 +72,6 @@ async def pre_checkout(pre_checkout_query: PreCheckoutQuery, django: DjangoClien
 @router.message(lambda message: message.successful_payment is not None)
 async def successful_payment_handler(message: Message, django: DjangoClient):
     payment = message.successful_payment
-
-    intent_id = _parse_intent_id(payment.invoice_payload or "")
     payload = {
         'payload': payment.invoice_payload,
         'total_amount': payment.total_amount,
@@ -110,10 +96,6 @@ async def successful_payment_handler(message: Message, django: DjangoClient):
                 "Теперь тебе доступны все премиум-возможности.\n"
                 "Открывай приложение и наслаждайся музыкой!"
             )
-            if intent_id:
-                reply += f"\nIntent ID: {intent_id}"
-            if payment.telegram_payment_charge_id:
-                reply += f"\nCharge ID: {payment.telegram_payment_charge_id}"
             await message.answer(reply)
             return
         if isinstance(result_data, dict) and result_data.get('status') == 'rejected':
@@ -123,3 +105,48 @@ async def successful_payment_handler(message: Message, django: DjangoClient):
             return
 
     await message.answer("Payment received. We are processing your subscription.")
+
+
+# @router.message(Command("refund"))
+# async def refund_handler(message: Message):
+#     if not message.text:
+#         await message.answer("Usage: /refund <charge_id>")
+#         return
+
+#     parts = message.text.strip().split(maxsplit=1)
+#     if len(parts) < 2 or not parts[1].strip():
+#         await message.answer("Usage: /refund <charge_id>")
+#         return
+
+#     charge_id = parts[1].strip()
+#     bot = message.bot
+#     token = getattr(bot, "token", None)
+#     if not token:
+#         await message.answer("Refund failed. Bot token not found.")
+#         return
+
+#     url = f"https://api.telegram.org/bot{token}/refundStarPayment"
+#     data = {
+#         'user_id': message.from_user.id,
+#         'telegram_payment_charge_id': charge_id,
+#     }
+
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             async with session.post(url, data=data, timeout=10) as resp:
+#                 result = await resp.json(content_type=None)
+#     except Exception as exc:
+#         logger.exception("Refund request failed: %s", exc)
+#         await message.answer("Refund failed. Please try again later.")
+#         return
+
+#     if isinstance(result, dict) and result.get('ok'):
+#         await message.answer("Refund successful. Stars were returned.")
+#         return
+
+#     description = None
+#     if isinstance(result, dict):
+#         description = result.get('description')
+#     await message.answer(
+#         f"Refund failed. {description}" if description else "Refund failed. Please check the charge id."
+#     )
