@@ -7,7 +7,7 @@ import aiohttp
 from aiohttp import ClientTimeout, MultipartWriter, web
 from aiogram import Bot, Dispatcher
 from aiogram.methods import TelegramMethod
-from aiogram.types import InputFile, TelegramType
+from aiogram.types import InputFile
 
 
 class ProxyRequestHandler:
@@ -73,9 +73,7 @@ class ProxyRequestHandler:
         task.add_done_callback(self._background_feed_update_tasks.discard)
         return web.json_response({}, dumps=self.bot.session.json_dumps)
 
-    def _build_response_writer(
-        self, result: Optional[TelegramMethod[TelegramType]]
-    ) -> MultipartWriter:
+    def _build_response_writer(self, result: Optional[TelegramMethod[Any]]) -> MultipartWriter:
         writer = MultipartWriter(
             "form-data",
             boundary=f"webhookBoundary{secrets.token_urlsafe(16)}",
