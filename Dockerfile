@@ -11,4 +11,6 @@ RUN pip install --no-cache-dir -r /app/r.txt
 COPY .env /app/.env
 COPY app /app/app
 
+EXPOSE 5555
+
 CMD ["python", "-m", "app.main"]

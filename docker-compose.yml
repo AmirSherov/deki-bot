@@ -5,6 +5,9 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      WEBAPP_HOST: "127.0.0.1"
+      WEBAPP_PORT: "5555"
     restart: unless-stopped
     ports:
       - "5555:5555"
