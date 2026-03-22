@@ -1,13 +1,12 @@
-version: '3.8'
-
 services:
   deki-bot:
     build: .
     env_file:
       - .env
     environment:
-      WEBAPP_HOST: "127.0.0.1"
+      # С пробросом ports трафик приходит на IP контейнера, не на 127.0.0.1.
+      WEBAPP_HOST: "0.0.0.0"
       WEBAPP_PORT: "5555"
     restart: unless-stopped
     ports:
-      - "5555:5555"
+      - "127.0.0.1:5555:5555"

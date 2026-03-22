@@ -67,7 +67,7 @@ def main() -> None:
     ProxyRequestHandler(
         dispatcher=dp,
         bot=bot,
-        proxy_url="http://127.0.0.1:8000/api/v1/studio/webhook/telegram/",
+        proxy_url="https://api.deki.one/api/v1/studio/webhook/telegram/",
         secret_token=settings.webhook_secret or None,
     ).register(app, path=settings.webhook_path)
     setup_application(app, dp, bot=bot)
