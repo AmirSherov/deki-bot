@@ -44,7 +44,7 @@ async def _channel_proxy_middleware(
     if event.channel_post is not None or event.my_chat_member is not None:
         django: DjangoClient | None = data.get('django')
         if django:
-            body = event.model_dump_json().encode()
+            body = event.model_dump_json(exclude_none=True).encode()
             url = f"{django.base_url}/api/v1/studio/webhook/telegram/"
             session = await django.session()
             try:
