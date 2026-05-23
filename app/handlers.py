@@ -2,7 +2,7 @@ import logging
 import asyncio
 import aiohttp
 from aiogram import Router
-from aiogram.types import Message, PreCheckoutQuery, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram.types import Message, ChatMemberUpdated, PreCheckoutQuery, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
@@ -11,6 +11,16 @@ from app.django_client import DjangoClient
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+@router.channel_post()
+async def channel_post_handler(message: Message) -> None:
+    pass  # proxied to Django via middleware in main.py
+
+
+@router.my_chat_member()
+async def my_chat_member_handler(update: ChatMemberUpdated) -> None:
+    pass  # proxied to Django via middleware in main.py
 
 
 @router.message(CommandStart())

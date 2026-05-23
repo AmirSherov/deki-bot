@@ -1,12 +1,17 @@
 import logging
 import asyncio
+import aiohttp
+from typing import Callable, Any, Awaitable
 from aiohttp import web
 from aiogram import Bot, Dispatcher
+from aiogram.types import Update as TgUpdate
 from aiogram.webhook.aiohttp_server import setup_application
 from app.config import load_settings
 from app.django_client import DjangoClient
 from app.handlers import router
 from app.webhook_proxy import ProxyRequestHandler
+
+logger = logging.getLogger(__name__)
 
 
 async def on_startup(bot: Bot, django: DjangoClient, settings, allowed_updates: list[str]) -> None:
@@ -31,6 +36,30 @@ def setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
 
+async def _channel_proxy_middleware(
+    handler: Callable[[TgUpdate, dict], Awaitable[Any]],
+    event: TgUpdate,
+    data: dict,
+) -> Any:
+    if event.channel_post is not None or event.my_chat_member is not None:
+        django: DjangoClient | None = data.get('django')
+        if django:
+            body = event.model_dump_json().encode()
+            url = f"{django.base_url}/api/v1/studio/webhook/telegram/"
+            session = await django.session()
+            try:
+                async with session.post(
+                    url,
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ):
+                    pass
+            except Exception:
+                logger.exception("Failed to proxy update to Django")
+    return await handler(event, data)
+
+
 def main() -> None:
     setup_logging()
     settings = load_settings()
@@ -41,6 +70,8 @@ def main() -> None:
 
     django = DjangoClient(settings.django_base_url, settings.bot_internal_secret)
     dp['django'] = django
+
+    dp.update.outer_middleware(_channel_proxy_middleware)
 
     allowed_updates = dp.resolve_used_update_types()
     if "pre_checkout_query" not in allowed_updates:
