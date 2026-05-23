@@ -10,7 +10,7 @@ from app.webhook_proxy import ProxyRequestHandler
 
 
 async def on_startup(bot: Bot, django: DjangoClient, settings, allowed_updates: list[str]) -> None:
-    if settings.webhook_url:
+    if settings.webhook_url and not settings.use_polling:
         webhook_url = f"{settings.webhook_url.rstrip('/')}{settings.webhook_path}"
         await bot.set_webhook(
             url=webhook_url,
