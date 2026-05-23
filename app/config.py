@@ -15,6 +15,7 @@ class Settings:
     web_host: str
     web_port: int
     django_base_url: str
+    django_telegram_webhook_url: str
     bot_internal_secret: str
     use_polling: bool
 
@@ -33,6 +34,10 @@ def load_settings() -> Settings:
     web_host = os.getenv('WEBAPP_HOST', '0.0.0.0')
     web_port = int(os.getenv('WEBAPP_PORT', '8080'))
     django_base_url = os.getenv('DJANGO_INTERNAL_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
+    django_telegram_webhook_url = os.getenv(
+        'DJANGO_TELEGRAM_WEBHOOK_URL',
+        f'{django_base_url}/api/v1/studio/webhook/telegram/',
+    ).strip()
     bot_internal_secret = os.getenv('BOT_INTERNAL_SECRET', '').strip()
     use_polling = _get_bool(os.getenv('USE_POLLING'), default=False)
 
@@ -49,6 +54,7 @@ def load_settings() -> Settings:
         web_host=web_host,
         web_port=web_port,
         django_base_url=django_base_url,
+        django_telegram_webhook_url=django_telegram_webhook_url,
         bot_internal_secret=bot_internal_secret,
         use_polling=use_polling,
     )

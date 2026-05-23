@@ -4,9 +4,10 @@ services:
     env_file:
       - .env
     environment:
-      # С пробросом ports трафик приходит на IP контейнера, не на 127.0.0.1.
       WEBAPP_HOST: "0.0.0.0"
       WEBAPP_PORT: "5555"
     restart: unless-stopped
     ports:
       - "127.0.0.1:5555:5555"
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
