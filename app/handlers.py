@@ -23,6 +23,11 @@ async def my_chat_member_handler(update: ChatMemberUpdated) -> None:
     pass  # proxied to Django via middleware in main.py
 
 
+@router.chat_member()
+async def chat_member_handler(update: ChatMemberUpdated) -> None:
+    pass  # proxied to Django via middleware in main.py
+
+
 @router.message(CommandStart())
 async def start(message: Message):
     name = message.from_user.first_name or message.from_user.username or "друг"

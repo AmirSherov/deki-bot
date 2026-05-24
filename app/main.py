@@ -36,12 +36,18 @@ def setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
 
+_PROXY_UPDATE_TYPES = ("channel_post", "my_chat_member", "chat_member")
+
+
 async def _channel_proxy_middleware(
     handler: Callable[[TgUpdate, dict], Awaitable[Any]],
     event: TgUpdate,
     data: dict,
 ) -> Any:
-    if event.channel_post is not None or event.my_chat_member is not None:
+    detected = [t for t in _PROXY_UPDATE_TYPES if getattr(event, t, None) is not None]
+    logger.info("Middleware update_id=%s detected=%s", event.update_id, detected or "none")
+
+    if detected:
         django: DjangoClient | None = data.get('django')
         if django:
             body = event.model_dump_json(exclude_none=True).encode()
@@ -53,10 +59,10 @@ async def _channel_proxy_middleware(
                     data=body,
                     headers={"Content-Type": "application/json"},
                     timeout=aiohttp.ClientTimeout(total=10),
-                ):
-                    pass
+                ) as resp:
+                    logger.info("Proxied %s update_id=%s → Django %s", detected, event.update_id, resp.status)
             except Exception:
-                logger.exception("Failed to proxy update to Django")
+                logger.exception("Failed to proxy update_id=%s to Django", event.update_id)
     return await handler(event, data)
 
 
@@ -80,6 +86,8 @@ def main() -> None:
         allowed_updates.append("channel_post")
     if "my_chat_member" not in allowed_updates:
         allowed_updates.append("my_chat_member")
+    if "chat_member" not in allowed_updates:
+        allowed_updates.append("chat_member")
 
     async def _startup():
         await on_startup(bot, django, settings, allowed_updates)
