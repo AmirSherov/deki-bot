@@ -9,9 +9,3 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:5555:5555"
-    networks:
-      - deki-shared
-
-networks:
-  deki-shared:
-    external: true
