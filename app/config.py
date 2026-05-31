@@ -18,6 +18,7 @@ class Settings:
     django_telegram_webhook_url: str
     bot_internal_secret: str
     use_polling: bool
+    telegram_api_base_url: str
 
 
 def _get_bool(value: str, default: bool = False) -> bool:
@@ -40,6 +41,7 @@ def load_settings() -> Settings:
     ).strip()
     bot_internal_secret = os.getenv('BOT_INTERNAL_SECRET', '').strip()
     use_polling = _get_bool(os.getenv('USE_POLLING'), default=False)
+    telegram_api_base_url = os.getenv('TELEGRAM_API_BASE_URL', 'https://api.telegram.org').rstrip('/')
 
     if not bot_token:
         raise RuntimeError('BOT_TOKEN is required')
@@ -57,4 +59,5 @@ def load_settings() -> Settings:
         django_telegram_webhook_url=django_telegram_webhook_url,
         bot_internal_secret=bot_internal_secret,
         use_polling=use_polling,
+        telegram_api_base_url=telegram_api_base_url,
     )

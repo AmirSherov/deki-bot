@@ -4,6 +4,8 @@ import aiohttp
 from typing import Callable, Any, Awaitable
 from aiohttp import web
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.types import Update as TgUpdate
 from aiogram.webhook.aiohttp_server import setup_application
 from app.config import load_settings
@@ -70,7 +72,10 @@ def main() -> None:
     setup_logging()
     settings = load_settings()
 
-    bot = Bot(token=settings.bot_token)
+    tg_session = AiohttpSession(
+        api=TelegramAPIServer.from_base(settings.telegram_api_base_url)
+    )
+    bot = Bot(token=settings.bot_token, session=tg_session)
     dp = Dispatcher()
     dp.include_router(router)
 

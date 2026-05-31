@@ -9,5 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:5555:5555"
-    extra_hosts:
-      - "api.telegram.org:149.154.167.220"
+    networks:
+      - deki-shared
+
+networks:
+  deki-shared:
+    external: true
