@@ -9,3 +9,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:5555:5555"
+    networks:
+      - default
+      - shared
+
+networks:
+  shared:
+    name: ${SHARED_NETWORK:-deki-shared}
+    external: true
