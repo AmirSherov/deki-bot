@@ -3,6 +3,10 @@ import logging
 import secrets
 from typing import Any, Dict, Optional, Set
 
+# Updates Django handles itself (channel uploads, the bot's membership in channels and
+# private chats). They are forwarded as they are, with X-Bot-Secret.
+PROXIED_UPDATE_TYPES = ("channel_post", "my_chat_member")
+
 import aiohttp
 from aiohttp import ClientTimeout, MultipartWriter, web
 from aiogram import Bot, Dispatcher
@@ -18,11 +22,13 @@ class ProxyRequestHandler:
         proxy_url: str,
         handle_in_background: bool = True,
         secret_token: Optional[str] = None,
+        bot_secret: str = "",
         **data: Any,
     ) -> None:
         self.dispatcher = dispatcher
         self.bot = bot
         self.proxy_url = proxy_url
+        self.bot_secret = bot_secret
         self.handle_in_background = handle_in_background
         self.secret_token = secret_token
         self.data = data
@@ -42,20 +48,32 @@ class ProxyRequestHandler:
             await self._proxy_session.close()
         await self.bot.session.close()
 
-    async def _proxy(self, body: bytes) -> None:
+    async def _proxy(self, body: bytes, update_id: Any) -> bool:
+        """Forwards the update to Django and waits for its answer. False when Django is
+        unreachable or failed (5xx): the update must be delivered again. A 4xx is Django
+        rejecting this update for good — retrying would not change it."""
         if self._proxy_session is None or self._proxy_session.closed:
             self._proxy_session = aiohttp.ClientSession()
-        timeout = ClientTimeout(total=10)
+        timeout = ClientTimeout(total=25)
         try:
             async with self._proxy_session.post(
                 self.proxy_url,
                 data=body,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "X-Bot-Secret": self.bot_secret},
                 timeout=timeout,
-            ):
-                return
+            ) as resp:
+                text = await resp.text()
+                if resp.status >= 500:
+                    self._logger.error("Django failed on update_id=%s: %s %s", update_id, resp.status, text[:300])
+                    return False
+                if resp.status >= 400:
+                    self._logger.warning("Django rejected update_id=%s: %s %s", update_id, resp.status, text[:300])
+                else:
+                    self._logger.info("Proxied update_id=%s to Django: %s", update_id, resp.status)
+                return True
         except Exception:
-            self._logger.exception("Proxying telegram update failed")
+            self._logger.exception("Proxying update_id=%s to Django failed", update_id)
+            return False
 
     def verify_secret(self, telegram_secret_token: str) -> bool:
         if self.secret_token:
@@ -111,19 +129,22 @@ class ProxyRequestHandler:
         return web.Response(body=self._build_response_writer(result=result))
 
     async def handle(self, request: web.Request) -> web.Response:
+        # Only the Bot API server knows the secret: nothing else gets in, forwarded or not.
+        if not self.verify_secret(request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")):
+            return web.Response(body="Unauthorized", status=401)
+
         body = await request.read()
         try:
             update = self.bot.session.json_loads(body.decode("utf-8"))
         except Exception:
             return web.Response(body="Bad Request", status=400)
 
-        if isinstance(update, dict) and ("channel_post" in update or "my_chat_member" in update):
-            task = asyncio.create_task(self._proxy(body))
-            task.add_done_callback(lambda t: t.exception())
-            return web.Response(status=200, text="OK")
-
-        if not self.verify_secret(request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")):
-            return web.Response(body="Unauthorized", status=401)
+        if isinstance(update, dict) and any(t in update for t in PROXIED_UPDATE_TYPES):
+            # Answered only once Django has it: on an error the Bot API server delivers
+            # the update again instead of it being lost (a deploy, a restart).
+            if await self._proxy(body, update.get("update_id")):
+                return web.Response(status=200, text="OK")
+            return web.Response(status=503, text="Django unavailable")
 
         if self.handle_in_background:
             return await self._handle_request_background(update=update)

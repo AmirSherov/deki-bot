@@ -11,7 +11,7 @@ from aiogram.webhook.aiohttp_server import setup_application
 from app.config import load_settings
 from app.django_client import DjangoClient
 from app.handlers import router
-from app.webhook_proxy import ProxyRequestHandler
+from app.webhook_proxy import PROXIED_UPDATE_TYPES, ProxyRequestHandler
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,15 @@ logger = logging.getLogger(__name__)
 async def on_startup(bot: Bot, django: DjangoClient, settings, allowed_updates: list[str]) -> None:
     if settings.webhook_url and not settings.use_polling:
         webhook_url = f"{settings.webhook_url.rstrip('/')}{settings.webhook_path}"
+        # Updates that arrived while the bot was restarting are kept and delivered now.
         await bot.set_webhook(
             url=webhook_url,
             secret_token=settings.webhook_secret or None,
-            drop_pending_updates=True,
+            drop_pending_updates=False,
             allowed_updates=allowed_updates,
         )
     else:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=False)
 
 
 async def on_shutdown(bot: Bot, django: DjangoClient) -> None:
@@ -38,7 +39,7 @@ def setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
 
-_PROXY_UPDATE_TYPES = ("channel_post", "my_chat_member", "chat_member")
+_PROXY_UPDATE_TYPES = PROXIED_UPDATE_TYPES
 
 
 async def _channel_proxy_middleware(
@@ -59,7 +60,7 @@ async def _channel_proxy_middleware(
                 async with session.post(
                     url,
                     data=body,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "X-Bot-Secret": django.bot_secret},
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     logger.info("Proxied %s update_id=%s → Django %s", detected, event.update_id, resp.status)
@@ -93,8 +94,9 @@ def main() -> None:
         allowed_updates.append("channel_post")
     if "my_chat_member" not in allowed_updates:
         allowed_updates.append("my_chat_member")
-    if "chat_member" not in allowed_updates:
-        allowed_updates.append("chat_member")
+    # Nobody handles other members joining/leaving channels: not requested.
+    if "chat_member" in allowed_updates:
+        allowed_updates.remove("chat_member")
 
     async def _startup():
         await on_startup(bot, django, settings, allowed_updates)
@@ -115,6 +117,7 @@ def main() -> None:
         bot=bot,
         proxy_url=settings.django_telegram_webhook_url,
         secret_token=settings.webhook_secret or None,
+        bot_secret=settings.bot_internal_secret,
     ).register(app, path=settings.webhook_path)
     setup_application(app, dp, bot=bot)
 

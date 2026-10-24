@@ -23,14 +23,23 @@ async def my_chat_member_handler(update: ChatMemberUpdated) -> None:
     pass  # proxied to Django via middleware in main.py
 
 
-@router.chat_member()
-async def chat_member_handler(update: ChatMemberUpdated) -> None:
-    pass  # proxied to Django via middleware in main.py
+async def _report_chat_open(django: DjangoClient, tg_id: int) -> None:
+    """/start: the user has a private chat with the bot — Django may push to them
+    (identity's bot_can_message). Best effort: the greeting goes out regardless."""
+    try:
+        result = await django.post(
+            '/internal/identity/bot-chat-status/', {'tg_id': tg_id, 'can_message': True}, timeout_seconds=5,
+        )
+        if result.get('status') != 200:
+            logger.warning("bot-chat-status for %s answered %s", tg_id, result.get('status'))
+    except Exception:
+        logger.exception("bot-chat-status for %s failed", tg_id)
 
 
 @router.message(CommandStart())
-async def start(message: Message):
-    name = message.from_user.first_name or message.from_user.username or "друг"
+async def start(message: Message, django: DjangoClient):
+    await _report_chat_open(django, message.from_user.id)
+    name =message.from_user.first_name or message.from_user.username or "друг"
     text = (
         f"Добро пожаловать в Deki Your Music, {name}!\n\n"
         "Deki - это твоя музыкальная платформа где ты можешь:\n\n"
