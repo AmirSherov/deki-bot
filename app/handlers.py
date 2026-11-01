@@ -1,11 +1,15 @@
 import logging
 import asyncio
 import aiohttp
-from aiogram import Router
-from aiogram.types import Message, ChatMemberUpdated, PreCheckoutQuery, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram import F, Router
+from aiogram.types import (
+    ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, Message,
+    PreCheckoutQuery, ReplyKeyboardMarkup, WebAppInfo,
+)
 from aiogram.filters import CommandStart, Command
-from aiogram.enums import ParseMode
+from aiogram.enums import ChatType, ParseMode
 from aiogram.exceptions import TelegramBadRequest
+from app import texts
 from app.django_client import DjangoClient
 
 
@@ -129,6 +133,37 @@ async def successful_payment_handler(message: Message, django: DjangoClient):
             return
 
     await message.answer("Payment received. We are processing your subscription.")
+
+
+# Files people send the bot directly. Uploads come only from the artist's storage channel:
+# nothing here is saved, the bot explains where to send it (Django picks the state and
+# answers at most once per person per cooldown, so an album of ten files gets one reply).
+_UPLOAD_LIKE = F.audio | F.voice | F.video | F.video_note | F.document | F.animation
+
+
+@router.message(F.chat.type == ChatType.PRIVATE, _UPLOAD_LIKE)
+async def private_file_hint(message: Message, django: DjangoClient):
+    try:
+        result = await django.post(
+            '/internal/studio/upload-hint/', {'tg_id': message.from_user.id}, timeout_seconds=5,
+        )
+    except Exception:
+        logger.exception("upload-hint for %s failed", message.from_user.id)
+        return
+    data = result.get('data')
+    hint = data.get('result') if isinstance(data, dict) and data.get('ok') else None
+    if result.get('status') != 200 or not isinstance(hint, dict) or not hint.get('reply'):
+        return
+
+    text, button_text = texts.upload_hint(
+        hint.get('state'), hint.get('channel_title'), message.from_user.language_code,
+    )
+    markup = None
+    if hint.get('button_url'):
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text=button_text, url=hint['button_url'])]],
+        )
+    await message.answer(text, reply_markup=markup)
 
 
 # @router.message(Command("refund"))
